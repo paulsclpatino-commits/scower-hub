@@ -13,7 +13,7 @@
 import { createHash } from 'node:crypto';
 import { identifyItem, classifyListings, heuristicMatches } from './ai.js';
 import { config, enabledFeatures } from './config.js';
-import { combineSignals, describeError } from './http.js';
+import { combineSignals, describeError, logWarning } from './http.js';
 import { extractSize, mergeListings } from './normalize.js';
 import { searchEbayByImage, searchEbayByKeyword } from './sources/ebay.js';
 import { searchGoogleLens, searchGoogleShopping } from './sources/serpapi.js';
@@ -77,7 +77,7 @@ export async function runSearch(input, { emit, signal, features = enabledFeature
       return value;
     } catch (err) {
       if (signal?.aborted) throw err;
-      console.warn(`[search] ${id} failed:`, describeError(err));
+      logWarning(`[search] ${id} failed:`, describeError(err));
       emit({ type: 'step', id, status: 'error', message: describeError(err) });
       return null;
     }

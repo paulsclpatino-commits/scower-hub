@@ -14,24 +14,28 @@ Drop in a photo of a piece of clothing and Scower finds that exact item for sale
 
 1. **Install Node.js** if you don't have it yet: download the **LTS** version from [nodejs.org](https://nodejs.org) and install it with the default options.
 2. **Download Scower:** on [the GitHub page](https://github.com/paulsclpatino-commits/scower-hub), click the green **Code** button, then **Download ZIP**.
-3. **Extract it:** right-click the downloaded ZIP, choose **Extract All...**, then **Extract**. Don't run anything from inside the ZIP.
-4. **Try the demo:** open the extracted folder (it may contain another folder with the same name; go into that one) and double-click **`start-demo.cmd`**. The first time, it spends about a minute installing packages. Then your browser opens Scower with sample listings, so you can see how it works without any accounts.
-5. **Real searches:** double-click **`start.cmd`**. The first time, it creates a settings file called `.env` and opens it in Notepad. Paste your API keys after the `=` signs (see [Real searches](#real-searches) for where to get them), save, close Notepad, and double-click `start.cmd` again.
+3. **Unblock and extract it:** right-click the downloaded ZIP, choose **Properties**, tick **Unblock** at the bottom (if it's there), and click **OK**. Then right-click the ZIP again, choose **Extract All...**, then **Extract**. Don't run anything from inside the ZIP.
+4. **Try the demo:** open the extracted folder (it may contain another folder with the same name; go into that one) and double-click **start-demo** (its type is "Windows Command Script"; the full name is `start-demo.cmd`). The first time, it spends about a minute installing packages. Then your browser opens Scower with sample listings. The demo shows the same sample hoodie listings whatever photo you use, so you can see how the site works without any accounts.
+5. **Real searches:** close the demo window, then double-click **start** (`start.cmd`). The first time, it creates a settings file and opens it in Notepad. Paste your API keys after the `=` signs (see [Real searches](#real-searches) for where to get them), save, close Notepad, and double-click `start.cmd` again. To change your keys later, double-click **edit-settings** (`edit-settings.cmd`).
 
-Keep the black window open while you use Scower; closing it stops Scower. If Windows shows **"Windows protected your PC"**, click **More info**, then **Run anyway** (Windows shows this for any script downloaded from the internet).
+Good to know:
+- Keep the black window open while you use Scower. Closing it stops Scower.
+- Don't click inside the black window: that pauses it. If Scower seems stuck, click the window and press **Esc**.
+- If Windows asks whether to run the file ("Open File - Security Warning", or "Windows protected your PC" > **More info**), choose **Run** / **Run anyway**. Unblocking the ZIP in step 3 prevents this.
+- Don't double-click `server.js` or open `public/index.html` directly. Windows can't run them that way; use the `.cmd` files.
 
-### Using PowerShell or a terminal instead
+### Using a terminal instead
 
-If PowerShell says `npm.ps1 cannot be loaded because running scripts is disabled on this system`, type **`npm.cmd`** instead of `npm`. It's the same command, and PowerShell allows it:
+1. Open the Scower folder (the one containing `start.cmd`) in File Explorer, click the address bar, type `cmd`, and press **Enter**. A Command Prompt opens in that folder.
+2. Run:
+   ```
+   npm install
+   npm run demo
+   ```
+   Your browser opens Scower at http://localhost:3000. For real searches, use `npm run local` instead of `npm run demo`.
+3. To stop Scower, press **Ctrl+C** in that window (answer **Y** if asked).
 
-```powershell
-npm.cmd install
-npm.cmd run demo
-```
-
-Run these inside the Scower folder (the one containing `start.cmd`). An easy way to get there: open that folder in File Explorer, click the address bar, type `powershell`, and press Enter.
-
-Command Prompt (`cmd`) doesn't have this restriction, so plain `npm` works there.
+In **PowerShell**, `npm` may fail with `npm.ps1 cannot be loaded because running scripts is disabled on this system`. Type `npm.cmd` instead of `npm` (for example `npm.cmd install`). It's the same program, and PowerShell allows it. Node.js 20.9 or newer is required.
 
 ## Mac / Linux
 
@@ -42,26 +46,24 @@ npm install
 npm run demo
 ```
 
-Open http://localhost:3000 and click **Find the lowest price**. Demo mode returns sample listings so you can see how the site works. Demo links open store search pages, not real listings.
+Your browser opens http://localhost:3000. Click **Find the lowest price** to see the sample results. Demo links open store search pages, not real listings.
 
 ## Real searches
 
-1. Create your settings file by copying `.env.example` to `.env`. On Windows, `start.cmd` does this for you. In a terminal:
+1. Create your settings file, `.env`, from the example. On Windows, double-click `edit-settings.cmd` (or run `start.cmd`, which does it the first time). On Mac/Linux:
    ```bash
-   cp .env.example .env        # Mac/Linux
-   copy .env.example .env      # Windows
+   cp .env.example .env
    ```
 2. Add the keys you have to `.env`. Each one is optional, but more keys means better results:
 
    | Key | What it adds | Where to get it |
    | --- | --- | --- |
-   | `ANTHROPIC_API_KEY` | Identifies the exact item and checks which listings really match | [console.anthropic.com](https://console.anthropic.com) |
-   | `SERPAPI_KEY` | Google Lens + Google Shopping, the widest coverage | [serpapi.com](https://serpapi.com) (has a free tier) |
-   | `EBAY_CLIENT_ID` + `EBAY_CLIENT_SECRET` | eBay photo search + keyword search | [developer.ebay.com](https://developer.ebay.com): create a **Production** keyset |
+   | `SERPAPI_KEY` | Google Lens + Google Shopping: finds your photo on Grailed, StockX, Depop, Poshmark, eBay, stores and more. **Start with this one.** | [serpapi.com](https://serpapi.com) (has a free plan) |
+   | `ANTHROPIC_API_KEY` | Names the exact item and checks which listings really match it | [console.anthropic.com](https://console.anthropic.com) (pay per use) |
+   | `EBAY_CLIENT_ID` + `EBAY_CLIENT_SECRET` | eBay photo search + keyword search | [developer.ebay.com](https://developer.ebay.com) (free): create a **Production** keyset |
 
-   Recommended setup: all three. With only `SERPAPI_KEY` you still get Google Lens results. With only `ANTHROPIC_API_KEY` the item is identified, and you get links to search each resale site.
-3. Start Scower: double-click `start.cmd` on Windows, or run `npm start` (`npm.cmd start` in PowerShell).
-4. Open http://localhost:3000 if your browser didn't open by itself.
+   With only `SERPAPI_KEY` you get Google Lens and Google Shopping results for your photo. Adding `ANTHROPIC_API_KEY` names the exact item, which makes the keyword searches more accurate, and marks which listings are look-alikes.
+3. Start Scower: double-click `start.cmd` on Windows, or run `npm run local` in a terminal.
 
 **Cost per search:** 3 SerpApi searches (2 Lens + 1 Shopping), 2 Claude requests, and a few eBay API calls, which are free within eBay's daily limits.
 

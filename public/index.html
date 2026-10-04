@@ -10,6 +10,15 @@
   <script type="module" src="/js/app.js"></script>
 </head>
 <body>
+  <script>
+    if (location.protocol === 'file:') {
+      document.body.insertAdjacentHTML('afterbegin',
+        '<div role="alert" style="padding:16px 20px;background:#fff4d6;color:#6b4b00;font:16px/1.5 system-ui,sans-serif;border-bottom:1px solid #e6c97a">' +
+        '<strong>Scower doesn\'t work when you open this file directly.</strong><br>' +
+        'Close this tab. In the Scower folder, double-click <b>start-demo.cmd</b> (or <b>start.cmd</b> once you have API keys). ' +
+        'It starts Scower and opens it in your browser at http://localhost:3000.</div>');
+    }
+  </script>
   <header class="topbar">
     <div class="container topbar-inner">
       <a class="brand" href="/" aria-label="Scower home">scower<span class="brand-dot">.</span></a>
@@ -18,7 +27,7 @@
   </header>
 
   <div id="demoBanner" class="demo-banner" hidden>
-    <div class="container">Demo mode: these are sample listings, and their links open store search pages rather than real listings.</div>
+    <div class="container"><strong>Demo mode:</strong> every search shows the same sample listings for a Supreme hoodie, whatever photo you upload, and the links open store search pages. To search for your own items, add API keys and start Scower with <code>start.cmd</code> (or <code>npm start</code>).</div>
   </div>
 
   <main>
@@ -32,7 +41,7 @@
           <label id="dropzone" class="dropzone" tabindex="0">
             <input id="fileInput" type="file" accept="image/*" class="visually-hidden">
             <span class="dz-empty">
-              <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5V19a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2.5M12 4v11m0-11-4 4m4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg class="dz-icon" width="44" height="44" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5V19a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2.5M12 4v11m0-11-4 4m4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
               <strong>Drop a photo here</strong>
               <span>or click to upload &middot; you can also paste with <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>V</kbd></span>
             </span>
@@ -55,7 +64,7 @@
 
         <div id="setupNotice" class="setup-notice" hidden>
           <strong>Almost ready: no search sources are connected.</strong>
-          <p>Add API keys to the <code>.env</code> file in the Scower folder (on Windows, double-click <code>start.cmd</code> to create it), then restart Scower:</p>
+          <p>Add API keys to the <code>.env</code> settings file in the Scower folder (on Windows, double-click <code>edit-settings.cmd</code> to open it), then restart Scower:</p>
           <ul>
             <li><b>ANTHROPIC_API_KEY</b>: identifies the exact item in your photo</li>
             <li><b>SERPAPI_KEY</b>: Google Lens and Google Shopping, which cover Grailed, StockX, Depop, Poshmark and many more</li>
@@ -123,7 +132,7 @@
           </div>
           <label class="sort">
             <span class="visually-hidden">Sort</span>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16m0 0-3-3m3 3 3-3M17 20V4m0 0-3 3m3-3 3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16m0 0-3-3m3 3 3-3M17 20V4m0 0-3 3m3-3 3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <select id="sortSelect"></select>
           </label>
         </div>

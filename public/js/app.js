@@ -110,6 +110,15 @@ function el(tag, attrs = {}, ...children) {
 // ---------------------------------------------------------------------------
 // Picking a photo
 
+const HEIC_MESSAGE =
+  "iPhone photos in HEIC format can't be opened in this browser. Open the photo, take a screenshot " +
+  '(Windows key + Shift + S), and paste it here with Ctrl+V. Or on your iPhone, choose ' +
+  'Settings > Camera > Formats > Most Compatible.';
+
+function isHeic(file) {
+  return /\.(heic|heif)$/i.test(file.name) || /^image\/hei[cf]/i.test(file.type);
+}
+
 async function prepareImage(file) {
   // Shrink big phone photos before upload; the server re-encodes anyway.
   let bitmap = null;
@@ -118,6 +127,8 @@ async function prepareImage(file) {
   } catch {
     bitmap = null;
   }
+  // Neither the browser nor the server can read HEIC, so don't upload it raw.
+  if (!bitmap && isHeic(file)) throw new Error('heic');
   if (!bitmap) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -154,8 +165,8 @@ function showPreview(src) {
 
 async function useFile(file) {
   if (!file) return;
-  if (!file.type.startsWith('image/')) {
-    showFormError("That file isn't an image.");
+  if (!file.type.startsWith('image/') && !isHeic(file)) {
+    showFormError("That file isn't an image. Use a photo (JPG, PNG or WebP) or a screenshot.");
     return;
   }
   hideFormError();
@@ -163,8 +174,8 @@ async function useFile(file) {
     state.image = await prepareImage(file);
     els.urlInput.value = '';
     showPreview(state.image);
-  } catch {
-    showFormError("Couldn't read that image. Try a JPG or PNG.");
+  } catch (err) {
+    showFormError(err?.message === 'heic' ? HEIC_MESSAGE : "Couldn't read that image. Try a JPG or PNG.");
   }
 }
 
@@ -202,7 +213,8 @@ function resetResults() {
   els.itemNotice.hidden = true;
   els.steps.replaceChildren();
   els.moreSites.hidden = true;
-  els.demoBanner.hidden = true;
+  els.demoBanner.hidden = !state.features?.demo;
+  els.itemNotice.classList.remove('is-error');
 }
 
 function showResultsView(imageSrc) {
@@ -262,11 +274,17 @@ async function startSearch({ image, imageUrl, hint, previewSrc }) {
     if (!state.done) handleEvent({ type: 'error', message: 'The search stopped early. Try again.' });
   } catch (err) {
     if (controller.signal.aborted) return;
+    // fetch() reports a stopped server as a TypeError: "Failed to fetch" (Chrome/Edge),
+    // "NetworkError when attempting to fetch resource." (Firefox), "Load failed" (Safari).
+    const lostServer = err instanceof TypeError && /fetch|network|load failed/i.test(err.message);
+    const message = lostServer
+      ? "Can't reach Scower. Make sure its black window is still open (double-click start.cmd to start it again), then try again."
+      : err.message || 'Search failed. Try again.';
     if (!state.started) {
       showSearchView();
-      showFormError(err.message || 'Search failed. Try again.');
+      showFormError(message);
     } else {
-      handleEvent({ type: 'error', message: err.message || 'Search failed.' });
+      handleEvent({ type: 'error', message });
     }
   } finally {
     if (state.controller === controller) setBusy(false);
@@ -353,10 +371,15 @@ function renderItem() {
   const item = state.item;
   if (!item) return;
   const name = [item.brand, item.name].filter(Boolean).join(' ') || item.query || 'Unknown item';
-  els.itemEyebrow.textContent = item.confidence === 'low' ? 'Best guess' : 'Looks like';
+  els.itemEyebrow.textContent = item.demo ? 'Demo sample item' : item.confidence === 'low' ? 'Best guess' : 'Looks like';
   els.itemName.textContent = name;
   const chips = [item.colorway, item.season, item.category].filter(Boolean).map((text) => el('span', { class: 'chip', text }));
-  if (item.confidence) {
+  if (item.demo) {
+    els.itemNotice.textContent =
+      "Demo mode doesn't look at your photo: it always shows these sample Supreme hoodie listings. " +
+      'To find your own item, add API keys to the .env file and start Scower with start.cmd instead of start-demo.cmd.';
+    els.itemNotice.hidden = false;
+  } else if (item.confidence) {
     const label = `${item.confidence[0].toUpperCase()}${item.confidence.slice(1)} confidence`;
     chips.push(el('span', { class: `chip chip-confidence is-${item.confidence}`, text: label }));
   }
@@ -722,6 +745,7 @@ async function loadStatus() {
     const { features } = await response.json();
     state.features = features;
     renderSourceStatus(features);
+    els.demoBanner.hidden = !features.demo;
     const anySource = features.identify || features.googleLens || features.ebay;
     els.setupNotice.hidden = anySource || features.demo;
   } catch {
@@ -787,7 +811,8 @@ function wire() {
     event.preventDefault();
     dragDepth = 0;
     document.body.classList.remove('is-dragging');
-    const file = [...(event.dataTransfer?.files || [])].find((f) => f.type.startsWith('image/'));
+    const files = [...(event.dataTransfer?.files || [])];
+    const file = files.find((f) => f.type.startsWith('image/') || isHeic(f)) || files[0];
     if (file) {
       if (els.hero.hidden) showSearchView();
       useFile(file);
@@ -821,6 +846,10 @@ function wire() {
     const hint = els.hintInput.value.trim();
     if (!state.image && !imageUrl && !state.features?.demo) {
       showFormError('Add a photo or paste an image link first.');
+      return;
+    }
+    if (!state.image && /^"?([a-z]:[\\/]|\\\\|file:)/i.test(imageUrl)) {
+      showFormError("That's a file on your computer, not a web link. Drag the photo onto the box above, or click the box to choose it.");
       return;
     }
     if (!state.image && imageUrl && !/^https?:\/\/\S+$/i.test(imageUrl)) {

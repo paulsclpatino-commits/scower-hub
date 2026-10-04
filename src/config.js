@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
@@ -5,7 +6,16 @@ import dotenv from 'dotenv';
 export const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 // Read .env from the project folder, whichever folder the server was started from.
-dotenv.config({ path: path.join(PROJECT_ROOT, '.env'), quiet: true });
+// Windows hides file extensions, so a settings file made in Notepad or by
+// renaming a text file is often really ".env.txt"; accept that too.
+const envFile = path.join(PROJECT_ROOT, '.env');
+const envTxtFile = path.join(PROJECT_ROOT, '.env.txt');
+if (!fs.existsSync(envFile) && fs.existsSync(envTxtFile)) {
+  console.warn('  Note: using settings from ".env.txt". Renaming it to ".env" is recommended.');
+  dotenv.config({ path: envTxtFile, quiet: true });
+} else {
+  dotenv.config({ path: envFile, quiet: true });
+}
 
 const env = process.env;
 
@@ -15,6 +25,8 @@ function flag(value) {
 
 export const config = {
   port: Number(env.PORT) || 3000,
+  // When the port wasn't chosen explicitly, the server may move to the next free one.
+  portIsFlexible: !Number(env.PORT),
 
   // Public base URL of this site (e.g. https://scower.onrender.com). Google Lens
   // needs a public link to the uploaded photo; when this is unset the server

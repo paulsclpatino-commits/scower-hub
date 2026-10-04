@@ -1,3 +1,13 @@
+// In a Windows 10 console, clicking the window enters "select" mode and any
+// console write then blocks the whole server until Esc is pressed. So per-search
+// logging stays off in an interactive Windows console unless SCOWER_DEBUG is set;
+// hosted deployments (no TTY) keep their logs.
+const quietConsole = process.platform === 'win32' && process.stdout.isTTY && !process.env.SCOWER_DEBUG;
+
+export function logWarning(...args) {
+  if (!quietConsole) console.warn(...args);
+}
+
 /** An error whose message is safe to show to the shopper. */
 export class UserError extends Error {
   constructor(message, status = 400) {
@@ -45,8 +55,23 @@ export async function fetchJson(url, { signal, timeoutMs = 20_000, ...init } = {
   return body;
 }
 
+const NETWORK_CODES = {
+  ENOTFOUND: "can't find the server (check your internet connection)",
+  EAI_AGAIN: "can't find the server (check your internet connection)",
+  ECONNREFUSED: 'connection refused',
+  ECONNRESET: 'connection dropped',
+  ETIMEDOUT: 'connection timed out',
+  UND_ERR_CONNECT_TIMEOUT: 'connection timed out',
+  UNABLE_TO_GET_ISSUER_CERT_LOCALLY: 'secure connection blocked, often by antivirus or a proxy that scans HTTPS',
+  SELF_SIGNED_CERT_IN_CHAIN: 'secure connection blocked, often by antivirus or a proxy that scans HTTPS',
+  CERT_HAS_EXPIRED: 'secure connection failed (check your computer clock)',
+};
+
 export function describeError(err) {
   if (err?.name === 'TimeoutError') return 'Timed out';
+  // Node's fetch hides the real reason in err.cause.
+  const code = err?.cause?.code;
+  if (err?.message === 'fetch failed' && code) return `Network error: ${NETWORK_CODES[code] || code}`;
   if (err?.name === 'AbortError') return 'Cancelled';
   if (err instanceof SourceError || err instanceof UserError) return err.message;
   if (err?.status) return `HTTP ${err.status}: ${err.message}`;

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import express from 'express';
 import { PROJECT_ROOT, enabledFeatures } from './config.js';
-import { UserError, describeError } from './http.js';
+import { UserError, describeError, logWarning } from './http.js';
 import { decodeDataUrl, fetchImageFromUrl, getHostedImage, normalizeImage, publicImageUrl } from './images.js';
 import { cachedSearch, runDemoSearch } from './search.js';
 
@@ -111,7 +111,7 @@ export function createApp({ features = () => enabledFeatures(), searchOptions = 
       }
     } catch (err) {
       if (!signal.aborted) {
-        console.error('[search] failed:', err);
+        logWarning('[search] failed:', err);
         emit({ type: 'error', message: `Search failed: ${describeError(err)}` });
       }
     } finally {
@@ -123,7 +123,7 @@ export function createApp({ features = () => enabledFeatures(), searchOptions = 
     if (res.headersSent) return next(err);
     if (err.type === 'entity.too.large') return res.status(413).json({ error: 'That image is too big (15 MB max).' });
     if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Bad request.' });
-    console.error(err);
+    logWarning(err);
     res.status(500).json({ error: 'Something went wrong.' });
   });
 

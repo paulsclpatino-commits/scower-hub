@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { describeError, SourceError } from '../src/http.js';
 import {
   canonicalUrl, extractSize, listingId, makeListing, mergeListings, parsePrice,
   resolveCurrency, storeFromUrl,
@@ -124,4 +125,15 @@ test('mergeListings prefers eBay API data over a Lens hit for the same item', ()
   assert.equal(merged.image, 'https://encrypted-tbn0.gstatic.com/x.jpg');
   assert.equal(merged.foundVia, 'visual');
   assert.deepEqual(merged.sources.sort(), ['ebay', 'google_lens']);
+});
+
+test('describeError explains network failures instead of "fetch failed"', () => {
+  const dns = Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } });
+  assert.match(describeError(dns), /internet connection/);
+  const tls = Object.assign(new TypeError('fetch failed'), { cause: { code: 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY' } });
+  assert.match(describeError(tls), /antivirus or a proxy/);
+  const odd = Object.assign(new TypeError('fetch failed'), { cause: { code: 'EWEIRD' } });
+  assert.equal(describeError(odd), 'Network error: EWEIRD');
+  assert.equal(describeError(new SourceError('HTTP 401: Invalid API key.')), 'HTTP 401: Invalid API key.');
+  assert.equal(describeError(Object.assign(new Error('x'), { name: 'TimeoutError' })), 'Timed out');
 });

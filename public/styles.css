@@ -164,6 +164,13 @@ a { color: inherit; }
   border-bottom: 1px solid var(--border);
 }
 
+.demo-banner code {
+  font-size: 12.5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.08);
+}
+
 /* Buttons ---------------------------------------------------------------- */
 
 .btn {

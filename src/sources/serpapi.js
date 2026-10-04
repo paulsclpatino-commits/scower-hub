@@ -58,7 +58,14 @@ export function lensQueryHint(body) {
   const related = (body.related_content || []).map((r) => r.query).find(Boolean);
   if (related) return related;
   const title = (body.visual_matches || []).map((m) => m.title).find(Boolean);
-  return title ? title.replace(/\s*[|–—-]\s*[^|–—-]*$/, '').slice(0, 80) : null;
+  if (!title) return null;
+  const cleaned = title
+    .replace(/\s*[|–—-]\s*[^|–—-]*$/, '') // " | Grailed", " - eBay"
+    .replace(/\b(?:size|sz|tagged)\.?\s*[:#-]?\s*\S+/gi, '') // a seller's size narrows the search
+    .replace(/\b(?:nwt|bnwt|ds|vnds|euc|guc|preowned|pre-owned|used|authentic)\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return cleaned.slice(0, 80) || null;
 }
 
 /**

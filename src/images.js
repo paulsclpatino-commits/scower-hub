@@ -4,14 +4,30 @@
 import { randomBytes } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import net from 'node:net';
-import sharp from 'sharp';
 import { config } from './config.js';
 import { UserError, combineSignals } from './http.js';
 
 const MAX_INPUT_BYTES = 15 * 1024 * 1024;
 
+// Loaded on first use, so demo mode still works if the image library failed to
+// install (e.g. packages installed with a too-old Node.js).
+let sharpModule;
+async function loadSharp() {
+  try {
+    sharpModule ??= (await import('sharp')).default;
+    return sharpModule;
+  } catch {
+    throw new UserError(
+      "Scower's image library isn't installed correctly. Close Scower and start it again with start.cmd, " +
+        'or run "npm.cmd install" in the Scower folder.',
+      500,
+    );
+  }
+}
+
 /** Re-encode any supported image as an upright JPEG no larger than 1280px. */
 export async function normalizeImage(buffer) {
+  const sharp = await loadSharp();
   try {
     return await sharp(buffer, { limitInputPixels: 80_000_000 })
       .rotate()

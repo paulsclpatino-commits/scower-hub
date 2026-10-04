@@ -54,6 +54,11 @@ test('mapLensMatches keeps priced and unpriced matches with valid links', () => 
   assert.equal(grailed.foundVia, 'visual');
   assert.equal(insta.price, null);
   assert.equal(lensQueryHint(LENS_RESPONSE), 'Supreme NYC Collage Zip Up Hoodie');
+  // Without related searches, the first title is used, minus size and condition words.
+  assert.equal(
+    lensQueryHint({ visual_matches: [{ title: 'NWT Supreme NYC Collage Zip Up Hooded Sweatshirt Black Size L | Grailed' }] }),
+    'Supreme NYC Collage Zip Up Hooded Sweatshirt Black',
+  );
 });
 
 test('searchGoogleLens calls SerpApi for products and all matches', async () => {
