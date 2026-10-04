@@ -1,7 +1,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import sharp from 'sharp';
-import { createApp } from '../server.js';
+import { createApp } from '../src/app.js';
 import { fetchImageFromUrl, isPrivateAddress, isPrivateHostname } from '../src/images.js';
 
 let server;

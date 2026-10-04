@@ -10,9 +10,32 @@ Drop in a photo of a piece of clothing and Scower finds that exact item for sale
 - **Match check**: AI marks each listing as an exact match, a similar item, or a different item (replicas, other colorways, lots), and hides the different ones by default
 - Results **stream in** as each source answers, and repeat searches of the same photo are cached for 30 minutes
 
-## Try it in 1 minute (no keys needed)
+## Windows: the easy way (no typing)
 
-You need [Node.js](https://nodejs.org) 20.3 or newer.
+1. **Install Node.js** if you don't have it yet: download the **LTS** version from [nodejs.org](https://nodejs.org) and install it with the default options.
+2. **Download Scower:** on [the GitHub page](https://github.com/paulsclpatino-commits/scower-hub), click the green **Code** button, then **Download ZIP**.
+3. **Extract it:** right-click the downloaded ZIP, choose **Extract All...**, then **Extract**. Don't run anything from inside the ZIP.
+4. **Try the demo:** open the extracted folder (it may contain another folder with the same name; go into that one) and double-click **`start-demo.cmd`**. The first time, it spends about a minute installing packages. Then your browser opens Scower with sample listings, so you can see how it works without any accounts.
+5. **Real searches:** double-click **`start.cmd`**. The first time, it creates a settings file called `.env` and opens it in Notepad. Paste your API keys after the `=` signs (see [Real searches](#real-searches) for where to get them), save, close Notepad, and double-click `start.cmd` again.
+
+Keep the black window open while you use Scower; closing it stops Scower. If Windows shows **"Windows protected your PC"**, click **More info**, then **Run anyway** (Windows shows this for any script downloaded from the internet).
+
+### Using PowerShell or a terminal instead
+
+If PowerShell says `npm.ps1 cannot be loaded because running scripts is disabled on this system`, type **`npm.cmd`** instead of `npm`. It's the same command, and PowerShell allows it:
+
+```powershell
+npm.cmd install
+npm.cmd run demo
+```
+
+Run these inside the Scower folder (the one containing `start.cmd`). An easy way to get there: open that folder in File Explorer, click the address bar, type `powershell`, and press Enter.
+
+Command Prompt (`cmd`) doesn't have this restriction, so plain `npm` works there.
+
+## Mac / Linux
+
+You need [Node.js](https://nodejs.org) 20.9 or newer.
 
 ```bash
 npm install
@@ -23,9 +46,10 @@ Open http://localhost:3000 and click **Find the lowest price**. Demo mode return
 
 ## Real searches
 
-1. Copy the example settings file:
+1. Create your settings file by copying `.env.example` to `.env`. On Windows, `start.cmd` does this for you. In a terminal:
    ```bash
-   cp .env.example .env
+   cp .env.example .env        # Mac/Linux
+   copy .env.example .env      # Windows
    ```
 2. Add the keys you have to `.env`. Each one is optional, but more keys means better results:
 
@@ -36,11 +60,8 @@ Open http://localhost:3000 and click **Find the lowest price**. Demo mode return
    | `EBAY_CLIENT_ID` + `EBAY_CLIENT_SECRET` | eBay photo search + keyword search | [developer.ebay.com](https://developer.ebay.com): create a **Production** keyset |
 
    Recommended setup: all three. With only `SERPAPI_KEY` you still get Google Lens results. With only `ANTHROPIC_API_KEY` the item is identified, and you get links to search each resale site.
-3. Start the server:
-   ```bash
-   npm start
-   ```
-4. Open http://localhost:3000.
+3. Start Scower: double-click `start.cmd` on Windows, or run `npm start` (`npm.cmd start` in PowerShell).
+4. Open http://localhost:3000 if your browser didn't open by itself.
 
 **Cost per search:** 3 SerpApi searches (2 Lens + 1 Shopping), 2 Claude requests, and a few eBay API calls, which are free within eBay's daily limits.
 
@@ -96,7 +117,9 @@ npm test      # unit + integration tests (no network needed)
 ```
 
 ```
-server.js              Express app: /api/search (NDJSON stream), /api/status, /img/:id
+server.js              entry point (--demo, --open); checks the Node.js version
+start.cmd, start-demo.cmd  Windows double-click launchers (shared checks in scripts/)
+src/app.js             Express app: /api/search (NDJSON stream), /api/status, /img/:id
 src/search.js          runs one search: sources in parallel, merging, match check, cache, demo
 src/ai.js              Claude: identify the item, classify listings
 src/sources/serpapi.js Google Lens + Google Shopping
