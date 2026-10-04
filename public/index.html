@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scower</title>
+  <meta name="description" content="Drop in a photo of any clothing item and see every listing for it, cheapest first.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a class="brand" href="/" aria-label="Scower home">scower<span class="brand-dot">.</span></a>
+      <span class="topbar-tag">Find any fit for less</span>
+    </div>
+  </header>
+
+  <div id="demoBanner" class="demo-banner" hidden>
+    <div class="container">Demo mode: these are sample listings, and their links open store search pages rather than real listings.</div>
+  </div>
+
+  <main>
+    <!-- Search -->
+    <section id="hero" class="hero">
+      <div class="container hero-inner">
+        <h1>Drop a pic. <span class="nowrap">Get the lowest price.</span></h1>
+        <p class="lede">Upload a photo of a piece of clothing. Scower finds that exact item on resale sites and stores, then lists every result from cheapest to most expensive, with sizes and links straight to each listing.</p>
+
+        <form id="searchForm" class="search-form" novalidate>
+          <label id="dropzone" class="dropzone" tabindex="0">
+            <input id="fileInput" type="file" accept="image/*" class="visually-hidden">
+            <span class="dz-empty">
+              <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5V19a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2.5M12 4v11m0-11-4 4m4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <strong>Drop a photo here</strong>
+              <span>or click to upload &middot; you can also paste with <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>V</kbd></span>
+            </span>
+            <span class="dz-filled" hidden>
+              <img id="preview" alt="Your photo">
+              <span class="dz-change">Change photo</span>
+            </span>
+          </label>
+
+          <div class="or-row"><span>or</span></div>
+
+          <input id="urlInput" class="text-input" type="url" inputmode="url" placeholder="Paste an image link (right-click a photo → Copy image address)" autocomplete="off">
+          <input id="hintInput" class="text-input" type="text" maxlength="200" placeholder="Optional note, e.g. “Supreme FW24, size L”" autocomplete="off">
+
+          <button id="searchButton" class="btn btn-primary btn-lg" type="submit">
+            <span class="btn-label">Find the lowest price</span>
+          </button>
+          <p id="formError" class="form-error" role="alert" hidden></p>
+        </form>
+
+        <div id="setupNotice" class="setup-notice" hidden>
+          <strong>Almost ready: no search sources are connected.</strong>
+          <p>Add API keys to a <code>.env</code> file (see the README) so Scower can identify items and pull listings:</p>
+          <ul>
+            <li><b>ANTHROPIC_API_KEY</b>: identifies the exact item in your photo</li>
+            <li><b>SERPAPI_KEY</b>: Google Lens and Google Shopping, which cover Grailed, StockX, Depop, Poshmark and many more</li>
+            <li><b>EBAY_CLIENT_ID / EBAY_CLIENT_SECRET</b>: eBay photo and keyword search</li>
+          </ul>
+          <p>Want to see how it works first? Run <code>npm run demo</code>.</p>
+        </div>
+
+        <ol class="how-it-works">
+          <li><b>1</b><span>Identifies the exact item, down to brand, model and colorway</span></li>
+          <li><b>2</b><span>Searches Google Lens, Google Shopping and eBay at once</span></li>
+          <li><b>3</b><span>Lines up every listing, cheapest first</span></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- Results -->
+    <section id="results" class="results" hidden>
+      <div class="container">
+        <div class="query-card">
+          <img id="queryImage" class="query-image" alt="">
+          <div class="query-body">
+            <div class="eyebrow" id="itemEyebrow">Looking at your photo…</div>
+            <h2 id="itemName" class="item-name">Identifying item…</h2>
+            <div id="itemMeta" class="item-meta"></div>
+            <ul id="steps" class="steps" aria-label="Search progress"></ul>
+          </div>
+          <button id="newSearch" class="btn btn-ghost" type="button">New search</button>
+        </div>
+
+        <p id="itemNotice" class="item-notice" hidden></p>
+
+        <div class="stats" id="stats" aria-live="polite"></div>
+
+        <div class="toolbar">
+          <div class="filters" id="filters">
+            <details class="dropdown" data-facet="sizes">
+              <summary class="filter-btn">Size</summary>
+              <div class="menu" data-menu="sizes"></div>
+            </details>
+            <details class="dropdown" data-facet="price">
+              <summary class="filter-btn">Price</summary>
+              <div class="menu menu-price">
+                <label>Min<input type="number" min="0" step="1" inputmode="numeric" id="minPrice" placeholder="$0"></label>
+                <label>Max<input type="number" min="0" step="1" inputmode="numeric" id="maxPrice" placeholder="Any"></label>
+              </div>
+            </details>
+            <details class="dropdown" data-facet="stores">
+              <summary class="filter-btn">Store</summary>
+              <div class="menu" data-menu="stores"></div>
+            </details>
+            <details class="dropdown" data-facet="conditions">
+              <summary class="filter-btn">Condition</summary>
+              <div class="menu" data-menu="conditions"></div>
+            </details>
+            <details class="dropdown" data-facet="match">
+              <summary class="filter-btn">Match</summary>
+              <div class="menu" data-menu="match">
+                <label class="option"><input type="radio" name="match" value="exact"> <span>Exact matches only</span></label>
+                <label class="option"><input type="radio" name="match" value="close" checked> <span>Exact + similar</span></label>
+                <label class="option"><input type="radio" name="match" value="all"> <span>Everything found</span></label>
+              </div>
+            </details>
+            <label class="check-btn"><input type="checkbox" id="showNoPrice"> <span>No-price listings</span></label>
+          </div>
+          <label class="sort">
+            <span class="visually-hidden">Sort</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16m0 0-3-3m3 3 3-3M17 20V4m0 0-3 3m3-3 3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <select id="sortSelect"></select>
+          </label>
+        </div>
+
+        <div id="activeFilters" class="active-filters"></div>
+
+        <div id="grid" class="grid" aria-live="polite"></div>
+        <div id="emptyState" class="empty-state" hidden></div>
+        <p id="hiddenNote" class="hidden-note" hidden></p>
+
+        <div id="moreSites" class="more-sites" hidden>
+          <h3>Check these sites too</h3>
+          <p>Opens each site's search for <q id="moreSitesQuery"></q>.</p>
+          <div id="moreSitesLinks" class="site-links"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <p>Prices, sizes and stock come from each store and can change. Always check the listing before you buy.</p>
+      <p id="sourceStatus" class="source-status"></p>
+    </div>
+  </footer>
+
+  <template id="cardTemplate">
+    <a class="card" target="_blank" rel="noopener noreferrer">
+      <div class="thumb">
+        <img loading="lazy" referrerpolicy="no-referrer" alt="">
+        <div class="badges"></div>
+      </div>
+      <div class="card-body">
+        <div class="card-store"></div>
+        <div class="card-title"></div>
+        <div class="card-size"></div>
+        <div class="card-price"><span class="price"></span><span class="ship"></span></div>
+      </div>
+    </a>
+  </template>
+</body>
+</html>

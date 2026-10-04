@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500">
+  <rect width="400" height="500" fill="#e9e8e4"/>
+  <g transform="translate(200 250)">
+    <path d="M-62 -150 C-62 -196 62 -196 62 -150 L62 -120 L122 -98 C150 -88 160 -70 162 -40 L172 120 L132 128 L118 -20 L112 175 L-112 175 L-118 -20 L-132 128 L-172 120 L-162 -40 C-160 -70 -150 -88 -122 -98 L-62 -120 Z" fill="#1d1d1f"/>
+    <path d="M-62 -150 C-62 -120 -30 -100 0 -100 C30 -100 62 -120 62 -150 C62 -170 -62 -170 -62 -150 Z" fill="#111"/>
+    <line x1="0" y1="-100" x2="0" y2="175" stroke="#9a9a9a" stroke-width="4"/>
+    <rect x="-90" y="60" width="70" height="46" rx="6" fill="#2a2a2c"/>
+    <rect x="20" y="60" width="70" height="46" rx="6" fill="#2a2a2c"/>
+    <g fill="#3d6fb6" opacity="0.9">
+      <rect x="-100" y="-70" width="70" height="26" rx="3"/>
+      <rect x="28" y="-40" width="74" height="26" rx="3"/>
+      <rect x="-96" y="0" width="62" height="24" rx="3"/>
+      <rect x="34" y="10" width="62" height="24" rx="3"/>
+    </g>
+    <g fill="#d64545" opacity="0.9">
+      <circle cx="58" cy="-80" r="14"/>
+      <circle cx="-60" cy="-26" r="12"/>
+      <rect x="-30" y="120" width="60" height="22" rx="3"/>
+    </g>
+    <rect x="-14" y="-168" width="28" height="11" fill="#e0262f"/>
+  </g>
+  <text x="200" y="476" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#8a8a85" text-anchor="middle" letter-spacing="4">DEMO</text>
+</svg>
