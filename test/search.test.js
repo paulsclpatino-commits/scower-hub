@@ -54,14 +54,14 @@ async function collect(fn) {
   return events;
 }
 
-const getImageUrl = async () => 'https://example.com/photo.jpg';
+const getLensImage = async () => ({ imageUrl: 'https://example.com/photo.jpg' });
 
 beforeEach(() => clearSearchCache());
 
 test('runSearch streams identification, listings from every source, then matches', async () => {
   const { deps, calls } = fakeDeps();
   const events = await collect((emit) =>
-    runSearch({ jpeg: Buffer.from('x'), hint: '' }, { emit, features: ALL_ON, deps, getImageUrl }),
+    runSearch({ jpeg: Buffer.from('x'), hint: '' }, { emit, features: ALL_ON, deps, getLensImage }),
   );
 
   assert.equal(events[0].type, 'start');
@@ -98,7 +98,7 @@ test('one failing source is reported without stopping the others', async () => {
     },
   });
   const events = await collect((emit) =>
-    runSearch({ jpeg: Buffer.from('x'), hint: '' }, { emit, features: ALL_ON, deps, getImageUrl }),
+    runSearch({ jpeg: Buffer.from('x'), hint: '' }, { emit, features: ALL_ON, deps, getLensImage }),
   );
   const failed = events.find((e) => e.type === 'step' && e.id === 'ebay_image' && e.status === 'error');
   assert.match(failed.message, /eBay is down/);
@@ -110,7 +110,7 @@ test('without Claude, the shopper note (or Lens) supplies the keyword query', as
   const features = { ...ALL_ON, identify: false };
   const { deps, calls } = fakeDeps();
   const withHint = await collect((emit) =>
-    runSearch({ jpeg: Buffer.from('x'), hint: 'supreme collage hoodie' }, { emit, features, deps, getImageUrl }),
+    runSearch({ jpeg: Buffer.from('x'), hint: 'supreme collage hoodie' }, { emit, features, deps, getLensImage }),
   );
   assert.deepEqual(calls.shopping, ['supreme collage hoodie']);
   assert.ok(withHint.some((e) => e.type === 'query' && e.origin === 'hint'));
@@ -120,7 +120,7 @@ test('without Claude, the shopper note (or Lens) supplies the keyword query', as
 
   const { deps: deps2, calls: calls2 } = fakeDeps();
   const fromLens = await collect((emit) =>
-    runSearch({ jpeg: Buffer.from('x'), hint: '' }, { emit, features, deps: deps2, getImageUrl }),
+    runSearch({ jpeg: Buffer.from('x'), hint: '' }, { emit, features, deps: deps2, getLensImage }),
   );
   assert.deepEqual(calls2.shopping, ['Supreme Collage Zip Up']);
   assert.ok(fromLens.some((e) => e.type === 'query' && e.origin === 'lens'));
@@ -133,7 +133,7 @@ test('a failed AI match check falls back to keyword matching', async () => {
     },
   });
   const events = await collect((emit) =>
-    runSearch({ jpeg: Buffer.from('x'), hint: '' }, { emit, features: ALL_ON, deps, getImageUrl }),
+    runSearch({ jpeg: Buffer.from('x'), hint: '' }, { emit, features: ALL_ON, deps, getLensImage }),
   );
   assert.ok(events.some((e) => e.type === 'step' && e.id === 'match' && e.status === 'error'));
   const matches = events.find((e) => e.type === 'matches');
@@ -144,11 +144,45 @@ test('a failed AI match check falls back to keyword matching', async () => {
 test('Lens is skipped with a reason when there is no public photo URL', async () => {
   const { deps } = fakeDeps();
   const events = await collect((emit) =>
-    runSearch({ jpeg: Buffer.from('x'), hint: '' }, { emit, features: ALL_ON, deps, getImageUrl: async () => null }),
+    runSearch({ jpeg: Buffer.from('x'), hint: '' }, { emit, features: ALL_ON, deps, getLensImage: async () => null }),
   );
   const lens = events.find((e) => e.type === 'step' && e.id === 'google_lens' && e.status !== 'running');
   assert.equal(lens.status, 'skipped');
-  assert.match(lens.message, /public link/);
+  assert.match(lens.message, /Google Lens/);
+});
+
+test('without eBay keys, eBay is searched through SerpApi once', async () => {
+  const features = { ...ALL_ON, ebay: false, ebaySerpApi: true };
+  const serpEbay = [];
+  const { deps, calls } = fakeDeps({
+    searchEbayByImage: async () => assert.fail('eBay photo search needs eBay keys'),
+    searchEbayViaSerpApi: async ({ query }) => {
+      serpEbay.push(query);
+      return [listing('https://www.ebay.com/itm/777777777777', 'Supreme NYC Collage Zip Up Black M', 175, 'ebay', 'keyword')];
+    },
+  });
+  const events = await collect((emit) =>
+    runSearch({ jpeg: Buffer.from('x'), hint: '' }, { emit, features, deps, getLensImage }),
+  );
+  assert.deepEqual(events[0].steps.map((s) => s.id), ['identify', 'google_lens', 'ebay_keyword', 'google_shopping', 'match']);
+  assert.deepEqual(serpEbay, [ITEM.query]);
+  assert.deepEqual(calls.ebayKeyword, []);
+  assert.ok(events.some((e) => e.type === 'step' && e.id === 'ebay_keyword' && e.status === 'done' && e.count === 1));
+});
+
+test('Lens receives an uploaded photo by image_id', async () => {
+  let lensArgs;
+  const { deps } = fakeDeps({
+    searchGoogleLens: async (args) => {
+      lensArgs = args;
+      return { listings: [], queryHint: null };
+    },
+  });
+  await collect((emit) =>
+    runSearch({ jpeg: Buffer.from('x'), hint: '' }, { emit, features: ALL_ON, deps, getLensImage: async () => ({ imageId: 'img123' }) }),
+  );
+  assert.equal(lensArgs.imageId, 'img123');
+  assert.equal(lensArgs.imageUrl, undefined);
 });
 
 test('cancelling a search stops it', async () => {
@@ -157,7 +191,7 @@ test('cancelling a search stops it', async () => {
     identifyItem: ({ signal }) =>
       new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true })),
   });
-  const run = runSearch({ jpeg: Buffer.from('x'), hint: '' }, { emit: () => {}, signal: controller.signal, features: ALL_ON, deps, getImageUrl });
+  const run = runSearch({ jpeg: Buffer.from('x'), hint: '' }, { emit: () => {}, signal: controller.signal, features: ALL_ON, deps, getLensImage });
   setTimeout(() => controller.abort(), 20);
   await assert.rejects(run);
 });
@@ -171,8 +205,8 @@ test('cachedSearch replays a repeat search without calling sources again', async
     },
   });
   const input = { jpeg: Buffer.from('same-photo'), hint: '' };
-  const first = await collect((emit) => cachedSearch(input, { emit, features: ALL_ON, deps, getImageUrl }));
-  const second = await collect((emit) => cachedSearch(input, { emit, features: ALL_ON, deps, getImageUrl }));
+  const first = await collect((emit) => cachedSearch(input, { emit, features: ALL_ON, deps, getLensImage }));
+  const second = await collect((emit) => cachedSearch(input, { emit, features: ALL_ON, deps, getLensImage }));
   assert.equal(lensCalls, 1);
   assert.equal(second.length, first.length);
   assert.equal(second.at(-1).cached, true);

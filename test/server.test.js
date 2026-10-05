@@ -2,7 +2,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import sharp from 'sharp';
 import { createApp } from '../src/app.js';
-import { fetchImageFromUrl, isPrivateAddress, isPrivateHostname } from '../src/images.js';
+import { fetchImageFromUrl, isPrivateAddress, isPrivateHostname, shrinkJpeg } from '../src/images.js';
 
 let server;
 let base;
@@ -108,4 +108,54 @@ test('local hostnames are not treated as public', () => {
     assert.equal(isPrivateHostname(host), true, host);
   }
   assert.equal(isPrivateHostname('scower.onrender.com'), false);
+});
+
+test('shrinkJpeg fits even a hard-to-compress photo under the upload limit', async () => {
+  const size = 1280;
+  const noise = Buffer.alloc(size * size * 3);
+  for (let i = 0; i < noise.length; i++) noise[i] = (i * 2654435761) >>> 24;
+  const big = await sharp(noise, { raw: { width: size, height: size, channels: 3 } }).jpeg({ quality: 90 }).toBuffer();
+  assert.ok(big.length > 490 * 1024, `test image should start too big (${big.length})`);
+  const small = await shrinkJpeg(big, 490 * 1024);
+  assert.ok(small.length <= 490 * 1024);
+  const tiny = Buffer.from(await sharp({ create: { width: 10, height: 10, channels: 3, background: '#000' } }).jpeg().toBuffer());
+  assert.equal(await shrinkJpeg(tiny, 490 * 1024), tiny);
+});
+
+test('a rejected SerpApi key is reported instead of uploading the photo elsewhere', async () => {
+  const { createApp: create } = await import('../src/app.js');
+  const { config } = await import('../src/config.js');
+  const previous = config.serpApiKey;
+  config.serpApiKey = 'bad-key';
+  const realFetch = globalThis.fetch;
+  const outbound = [];
+  globalThis.fetch = async (url, init) => {
+    const target = String(url);
+    if (target.startsWith('http://127.0.0.1')) return realFetch(url, init);
+    outbound.push(target);
+    return new Response(JSON.stringify({ error: 'Invalid API key.' }), { status: 401 });
+  };
+  const app = create({
+    features: () => ({ identify: false, googleLens: true, googleShopping: false, ebay: false, ebaySerpApi: false, demo: false }),
+  });
+  const srv = await new Promise((resolve) => {
+    const s = app.listen(0, '127.0.0.1', () => resolve(s));
+  });
+  try {
+    const png = await sharp({ create: { width: 30, height: 30, channels: 3, background: '#a33' } }).png().toBuffer();
+    const response = await realFetch(`http://127.0.0.1:${srv.address().port}/api/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: `data:image/png;base64,${png.toString('base64')}` }),
+    });
+    const events = await readNdjson(response);
+    const lens = events.find((e) => e.type === 'step' && e.id === 'google_lens' && e.status !== 'running');
+    assert.equal(lens.status, 'error');
+    assert.match(lens.message, /Invalid API key/);
+    assert.deepEqual(outbound, ['https://serpapi.com/image']);
+  } finally {
+    globalThis.fetch = realFetch;
+    config.serpApiKey = previous;
+    srv.close();
+  }
 });

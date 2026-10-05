@@ -26,6 +26,12 @@ test('default filters hide different items and listings without a price', () => 
   assert.equal(applyFilters(listings, verdicts, filters({ match: 'all', showNoPrice: true })).length, 5);
 });
 
+test('a multi-size listing matches any size filter', () => {
+  const multi = [...listings, L('m', 120, { size: 'Several sizes' })];
+  assert.ok(applyFilters(multi, verdicts, filters({ sizes: ['L'] })).some((l) => l.id === 'm'));
+  assert.ok(applyFilters(multi, verdicts, filters({ sizes: ['XS'] })).some((l) => l.id === 'm'));
+});
+
 test('facet and price filters combine', () => {
   const f = filters({ sizes: ['L'], conditions: ['Used'], maxPrice: 190 });
   assert.deepEqual(applyFilters(listings, verdicts, f).map((l) => l.id), ['c']);

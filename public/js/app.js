@@ -1,5 +1,6 @@
 import {
   DEFAULT_FILTERS,
+  MULTI_SIZE,
   SORTS,
   UNKNOWN_SIZE,
   applyFilters,
@@ -60,6 +61,8 @@ const CONDITION_ORDER = ['New', 'Used', 'Unknown'];
 const state = {
   features: null,
   image: null, // data URL of the prepared upload
+  preparing: null, // promise while a chosen photo is being resized
+  waitingForPhoto: false, // a search is waiting for that photo
   controller: null,
   started: false,
   done: false,
@@ -163,20 +166,31 @@ function showPreview(src) {
   els.dropzone.classList.add('has-image');
 }
 
-async function useFile(file) {
+function useFile(file) {
   if (!file) return;
   if (!file.type.startsWith('image/') && !isHeic(file)) {
     showFormError("That file isn't an image. Use a photo (JPG, PNG or WebP) or a screenshot.");
     return;
   }
   hideFormError();
-  try {
-    state.image = await prepareImage(file);
-    els.urlInput.value = '';
-    showPreview(state.image);
-  } catch (err) {
-    showFormError(err?.message === 'heic' ? HEIC_MESSAGE : "Couldn't read that image. Try a JPG or PNG.");
-  }
+  // Searching waits for this, so a quick click right after choosing a big
+  // photo doesn't say "add a photo first".
+  const preparing = (async () => {
+    try {
+      const image = await prepareImage(file);
+      if (state.preparing !== preparing) return; // a newer photo was picked meanwhile
+      state.image = image;
+      els.urlInput.value = '';
+      showPreview(state.image);
+    } catch (err) {
+      if (state.preparing === preparing) {
+        showFormError(err?.message === 'heic' ? HEIC_MESSAGE : "Couldn't read that image. Try a JPG or PNG.");
+      }
+    } finally {
+      if (state.preparing === preparing) state.preparing = null;
+    }
+  })();
+  state.preparing = preparing;
 }
 
 function showFormError(message) {
@@ -497,7 +511,7 @@ function renderActiveFilters() {
   const chip = (label, onRemove) =>
     el('button', { type: 'button', class: 'filter-chip', onclick: onRemove, 'aria-label': `Remove filter ${label}` }, label, el('span', { 'aria-hidden': 'true', text: '×' }));
 
-  for (const size of f.sizes) chips.push(chip(size === UNKNOWN_SIZE ? 'Size not listed' : `Size ${size}`, () => toggleFacet('sizes', size, false)));
+  for (const size of f.sizes) chips.push(chip(sizeLabel(size === UNKNOWN_SIZE ? null : size), () => toggleFacet('sizes', size, false)));
   for (const store of f.stores) chips.push(chip(store, () => toggleFacet('stores', store, false)));
   for (const condition of f.conditions) chips.push(chip(condition === 'Unknown' ? 'Condition not stated' : condition, () => toggleFacet('conditions', condition, false)));
   if (f.minPrice != null || f.maxPrice != null) {
@@ -553,6 +567,11 @@ function renderGrid(sorted, all) {
   els.grid.replaceChildren(...nodes);
 }
 
+function sizeLabel(size) {
+  if (!size) return 'Size not listed';
+  return size === MULTI_SIZE ? 'Several sizes' : `Size ${size}`;
+}
+
 function cheapestId(listings) {
   let best = null;
   for (const l of listings) {
@@ -598,7 +617,7 @@ function buildCard(listing, verdict, highlight) {
   }
   $('.card-title', node).textContent = listing.title;
   const size = $('.card-size', node);
-  size.textContent = listing.size ? `Size ${listing.size}` : 'Size not listed';
+  size.textContent = sizeLabel(listing.size);
   size.classList.toggle('is-unknown', !listing.size);
 
   const price = $('.price', node);
@@ -727,7 +746,7 @@ function renderSourceStatus(features) {
     ['AI identification', features.identify],
     ['Google Lens', features.googleLens],
     ['Google Shopping', features.googleShopping],
-    ['eBay', features.ebay],
+    ['eBay', features.ebay || features.ebaySerpApi],
   ];
   els.sourceStatus.replaceChildren(
     'Sources: ',
@@ -784,6 +803,7 @@ function wire() {
     const url = els.urlInput.value.trim();
     if (/^https?:\/\/\S+$/i.test(url)) {
       state.image = null;
+      state.preparing = null; // the link replaces any photo still being prepared
       showPreview(url);
     } else if (!state.image) {
       showPreview(null);
@@ -839,9 +859,20 @@ function wire() {
     }
   });
 
-  els.form.addEventListener('submit', (event) => {
+  els.form.addEventListener('submit', async (event) => {
     event.preventDefault();
     hideFormError();
+    if (state.preparing) {
+      if (state.waitingForPhoto) return; // already queued; extra clicks would start extra searches
+      state.waitingForPhoto = true;
+      try {
+        // Another photo may be picked while waiting; wait for the latest one.
+        while (state.preparing) await state.preparing;
+      } finally {
+        state.waitingForPhoto = false;
+      }
+      if (!els.formError.hidden) return; // the photo couldn't be read; keep that message
+    }
     const imageUrl = els.urlInput.value.trim();
     const hint = els.hintInput.value.trim();
     if (!state.image && !imageUrl && !state.features?.demo) {

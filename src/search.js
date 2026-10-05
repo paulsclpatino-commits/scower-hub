@@ -11,12 +11,12 @@
 //   done     { total, elapsedMs, cached }
 
 import { createHash } from 'node:crypto';
-import { identifyItem, classifyListings, heuristicMatches } from './ai.js';
+import { identifyItem, classifyListings, heuristicMatches, looksLikeKnockoff } from './ai.js';
 import { config, enabledFeatures } from './config.js';
 import { combineSignals, describeError, logWarning } from './http.js';
 import { extractSize, mergeListings } from './normalize.js';
 import { searchEbayByImage, searchEbayByKeyword } from './sources/ebay.js';
-import { searchGoogleLens, searchGoogleShopping } from './sources/serpapi.js';
+import { searchEbayViaSerpApi, searchGoogleLens, searchGoogleShopping } from './sources/serpapi.js';
 import { DEMO_ITEM, demoListings } from './sources/demo.js';
 
 export const defaultDeps = {
@@ -26,6 +26,7 @@ export const defaultDeps = {
   searchGoogleShopping,
   searchEbayByImage,
   searchEbayByKeyword,
+  searchEbayViaSerpApi,
 };
 
 export const STEP_LABELS = {
@@ -39,7 +40,11 @@ export const STEP_LABELS = {
 
 const AI_TIMEOUT_MS = 90_000;
 
-export async function runSearch(input, { emit, signal, features = enabledFeatures(), deps = defaultDeps, getImageUrl }) {
+/**
+ * getLensImage() resolves to how Google Lens should receive the photo:
+ * { imageId } (uploaded to SerpApi), { imageUrl } (a public link), or null.
+ */
+export async function runSearch(input, { emit, signal, features = enabledFeatures(), deps = defaultDeps, getLensImage }) {
   const startedAt = Date.now();
   const { jpeg, hint } = input;
   const timeoutMs = config.sourceTimeoutMs;
@@ -48,6 +53,7 @@ export async function runSearch(input, { emit, signal, features = enabledFeature
   if (features.identify) stepIds.push('identify');
   if (features.googleLens) stepIds.push('google_lens');
   if (features.ebay) stepIds.push('ebay_image', 'ebay_keyword');
+  else if (features.ebaySerpApi) stepIds.push('ebay_keyword');
   if (features.googleShopping) stepIds.push('google_shopping');
   const hasListingSources = stepIds.some((id) => id !== 'identify');
   if (features.identify && hasListingSources) stepIds.push('match');
@@ -93,9 +99,9 @@ export async function runSearch(input, { emit, signal, features = enabledFeature
 
   const lens = features.googleLens
     ? step('google_lens', async () => {
-        const imageUrl = await getImageUrl();
-        if (!imageUrl) return { skipped: 'Needs a public link to the photo (see PUBLIC_URL in the README)' };
-        const result = await deps.searchGoogleLens({ imageUrl, signal, timeoutMs });
+        const image = await getLensImage();
+        if (!image) return { skipped: "Couldn't send the photo to Google Lens (see TEMP_IMAGE_HOST in the README)" };
+        const result = await deps.searchGoogleLens({ ...image, signal, timeoutMs });
         return { value: result.queryHint, count: addListings(result.listings) };
       })
     : Promise.resolve(null);
@@ -116,11 +122,15 @@ export async function runSearch(input, { emit, signal, features = enabledFeature
   // Rejects only when the search is cancelled; the steps below surface that.
   queryPromise.catch(() => {});
 
-  const ebayKeyword = features.ebay
+  const ebayKeyword = features.ebay || features.ebaySerpApi
     ? step('ebay_keyword', async () => {
         const { query, item } = await queryPromise;
         if (!query) return { skipped: 'No item name to search for' };
+        if (!features.ebay) {
+          return { count: addListings(await deps.searchEbayViaSerpApi({ query, signal, timeoutMs })) };
+        }
         let items = await deps.searchEbayByKeyword({ query, signal, timeoutMs });
+        // eBay's own API is free, so a broader second search is worth it when results are thin.
         const fallback = item?.altQueries?.[0];
         if (items.length < 5 && fallback) {
           items = items.concat(await deps.searchEbayByKeyword({ query: fallback, signal, timeoutMs }));
@@ -158,7 +168,8 @@ export async function runSearch(input, { emit, signal, features = enabledFeature
     // Titles from an image match often skip the product name; don't hide them
     // on a keyword miss.
     for (const [id, verdict] of Object.entries(verdicts)) {
-      if (verdict === 'different' && listings.get(id).foundVia === 'visual') delete verdicts[id];
+      const listing = listings.get(id);
+      if (verdict === 'different' && listing.foundVia === 'visual' && !looksLikeKnockoff(listing.title, query)) delete verdicts[id];
     }
     emit({ type: 'matches', verdicts, method: 'keywords' });
   }

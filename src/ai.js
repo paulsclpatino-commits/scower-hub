@@ -181,11 +181,33 @@ function tokens(text) {
     .filter((t) => t.length > 1 && !STOPWORDS.has(t));
 }
 
+// Words sellers use for knock-offs and multi-item lots. Negated uses ("not fake",
+// "no reps") don't count.
+const KNOCKOFF_PATTERN =
+  /(?<!\b(?:not|no|non)[\s-](?:a\s)?)\b(?:inspired|replicas?|reps?|1:1|dupes?|bootleg|knock-?offs?|fakes?(?!\s+(?:fur|leather|suede|pockets?))|not authentic|(?:lot|bundle) of \d+)\b/gi;
+
+/**
+ * True when a title looks like a knock-off or a lot. A word that is also in the
+ * search query doesn't count, since some real products use them
+ * (Maison Margiela "Replica" sneakers).
+ */
+export function looksLikeKnockoff(title, query = '') {
+  const wanted = new Set(tokens(query));
+  for (const match of (title || '').matchAll(KNOCKOFF_PATTERN)) {
+    if (!tokens(match[0]).some((word) => wanted.has(word))) return true;
+  }
+  return false;
+}
+
 export function heuristicMatches(query, listings) {
   const wanted = [...new Set(tokens(query))];
   const verdicts = {};
   if (!wanted.length) return verdicts;
   for (const listing of listings) {
+    if (looksLikeKnockoff(listing.title, query)) {
+      verdicts[listing.id] = 'different';
+      continue;
+    }
     const have = new Set(tokens(listing.title));
     const hits = wanted.filter((t) => have.has(t)).length / wanted.length;
     verdicts[listing.id] = hits >= 0.75 ? 'exact' : hits >= 0.4 ? 'similar' : 'different';

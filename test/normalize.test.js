@@ -56,6 +56,8 @@ test('extractSize does not invent sizes', () => {
     'Harley Davidson Tee L.A. Black',
     'Supreme Large Logo Hoodie',
     'Vintage 1994 Supreme Tee',
+    'Supreme Collage Zip Up Hoodie Black - Sizes S M L XL',
+    'Supreme Hoodie S/M/L available',
   ]) {
     assert.equal(extractSize(title), null, title);
   }

@@ -2,7 +2,10 @@ import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { config } from '../src/config.js';
 import { mapEbayItems, resetEbayToken, searchEbayByImage, searchEbayByKeyword } from '../src/sources/ebay.js';
-import { lensQueryHint, mapLensMatches, mapShoppingResults, searchGoogleLens } from '../src/sources/serpapi.js';
+import {
+  lensQueryHint, mapLensMatches, mapSerpApiEbayResults, mapShoppingResults, searchEbayViaSerpApi,
+  searchGoogleLens, uploadImageToSerpApi,
+} from '../src/sources/serpapi.js';
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -195,4 +198,151 @@ test('eBay search gets an app token once and sends the photo as base64', async (
     Object.assign(config.ebay, previous);
     resetEbayToken();
   }
+});
+
+test('lensQueryHint keeps the words most matching titles agree on', () => {
+  const vm = (titles) => ({ visual_matches: titles.map((title) => ({ title })) });
+  assert.equal(
+    lensQueryHint(vm([
+      'Supreme NYC Collage Zip Up Hooded Sweatshirt Black Size L | Grailed',
+      'Supreme Collage Zip Up Hoodie Black XL - Depop',
+      'Supreme NYC Collage Zip-Up Hooded Sweatshirt FW24',
+      'SUPREME NYC COLLAGE ZIP UP HOODED SWEATSHIRT BLACK MEDIUM',
+      "Men's Hoodie Graphic Print Black",
+    ])),
+    'Supreme NYC Collage Zip Up Hooded Sweatshirt Black',
+  );
+  // Words shared by the top-ranked matches survive even when look-alikes outnumber them.
+  const lookAlikes = Array.from({ length: 16 }, (_, i) => `Kapital Denim Jacket Indigo Style ${i}`);
+  assert.equal(
+    lensQueryHint(vm([
+      'Kapital Kountry Boro Patchwork Denim Jacket Indigo',
+      'Kapital Kountry Boro Patchwork Denim Jacket Indigo XL',
+      'Kapital Kountry Boro Patchwork Denim Jacket Indigo',
+      'Kapital Boro Patchwork Denim Jacket',
+      ...lookAlikes,
+    ])),
+    'Kapital Kountry Boro Patchwork Denim Jacket Indigo',
+  );
+  // Brand words that look like filler survive.
+  assert.equal(
+    lensQueryHint(vm(['New Balance 550 White Green Size 10', 'NEW Balance 550 White Green', 'New Balance 550 Sneakers White/Green NWT'])),
+    'New Balance 550 White Green',
+  );
+  // Titles from both Lens searches count, and Google's related search wins.
+  assert.equal(lensQueryHint(vm(['a b']), { related_content: [{ query: 'supreme collage hoodie' }] }), 'supreme collage hoodie');
+  assert.equal(lensQueryHint({}), null);
+});
+
+test('uploadImageToSerpApi posts the photo and returns its image_id', async () => {
+  const previousKey = config.serpApiKey;
+  config.serpApiKey = 'test-key';
+  try {
+    const calls = mockFetch(() => ({ body: { message: 'Image uploaded successfully.', image_id: 'img123' } }));
+    const id = await uploadImageToSerpApi(Buffer.from('jpeg-bytes'));
+    assert.equal(id, 'img123');
+    assert.equal(calls[0].url, 'https://serpapi.com/image');
+    assert.equal(calls[0].init.method, 'POST');
+    const form = calls[0].init.body;
+    assert.equal(form.get('api_key'), 'test-key');
+    assert.equal(Buffer.from(await form.get('image').arrayBuffer()).toString(), 'jpeg-bytes');
+
+    mockFetch(() => ({ status: 400, body: { error: 'File is too large.' } }));
+    await assert.rejects(uploadImageToSerpApi(Buffer.from('x')), /too large/);
+  } finally {
+    config.serpApiKey = previousKey;
+  }
+});
+
+test('searchGoogleLens searches by image_id when the photo was uploaded', async () => {
+  const calls = mockFetch(() => ({ body: LENS_RESPONSE }));
+  await searchGoogleLens({ imageId: 'img123', timeoutMs: 1000 });
+  for (const call of calls) {
+    const params = new URL(call.url).searchParams;
+    assert.equal(params.get('image_id'), 'img123');
+    assert.equal(params.has('url'), false);
+  }
+});
+
+const SERPAPI_EBAY_RESPONSE = {
+  organic_results: [
+    {
+      title: 'Supreme NYC Collage Zip Up Hooded Sweatshirt Black Size Large',
+      link: 'https://www.ebay.com/itm/334455667788?hash=item1',
+      condition: 'Pre-Owned',
+      price: { raw: '$165.00', extracted: 165 },
+      shipping: '+$12.50 shipping',
+      thumbnail: 'https://i.ebayimg.com/thumbs/images/g/a/s-l300.jpg',
+    },
+    {
+      title: 'Supreme Collage Zip Up Hoodie Black - Sizes S M L XL',
+      link: 'https://www.ebay.com/itm/998877665544',
+      condition: 'Brand New',
+      price: { from: { raw: '$190.00', extracted: 190 }, to: { raw: '$240.00', extracted: 240 } },
+      shipping: 'Free 4 day shipping',
+      buy_it_now: true,
+    },
+    {
+      title: 'Supreme Collage Hoodie Auction',
+      link: 'https://www.ebay.com/itm/112233445566',
+      price: { raw: '$80.00', extracted: 80 },
+      bids: 3,
+      shipping: { raw: '+$9.00 shipping', extracted: 9 },
+    },
+  ],
+};
+
+test('mapSerpApiEbayResults reads prices, price ranges, shipping and auctions', () => {
+  const [used, range, auction] = mapSerpApiEbayResults(SERPAPI_EBAY_RESPONSE, 'us');
+  assert.equal(used.price, 165);
+  assert.equal(used.shipping, 12.5);
+  assert.equal(used.size, 'L');
+  assert.equal(used.store, 'eBay');
+  assert.deepEqual(used.sources, ['ebay']);
+  assert.equal(range.price, 190);
+  assert.equal(range.size, 'Several sizes');
+  // A range from colour variants keeps the size the title states.
+  const [colours] = mapSerpApiEbayResults({
+    organic_results: [{ title: 'Nike Tech Fleece Hoodie Size M - Choose Colour', link: 'https://www.ebay.com/itm/121212121212', price: { from: { raw: '$80.00', extracted: 80 }, to: { raw: '$95.00', extracted: 95 } } }],
+  }, 'us');
+  assert.equal(colours.size, 'M');
+  // Localized shipping text on European eBay sites.
+  const [de1, de2] = mapSerpApiEbayResults({
+    organic_results: [
+      { title: 'a', link: 'https://www.ebay.de/itm/1', price: { raw: 'EUR 165,00', extracted: 165 }, shipping: '+EUR 4,99 Versand' },
+      { title: 'b', link: 'https://www.ebay.de/itm/2', price: { raw: 'EUR 167,00', extracted: 167 }, shipping: 'Kostenloser Versand' },
+    ],
+  }, 'de');
+  assert.equal(de1.currency, 'EUR');
+  assert.equal(de1.shipping, 4.99);
+  assert.equal(de2.shipping, 0);
+  assert.equal(range.shipping, 0);
+  assert.equal(range.buyingFormat, null);
+  assert.equal(auction.price, 80);
+  assert.equal(auction.shipping, 9);
+  assert.equal(auction.buyingFormat, 'Auction');
+});
+
+test('countries without their own eBay site read ebay.com prices as US dollars', async () => {
+  const previous = config.country;
+  config.country = 'nz';
+  try {
+    mockFetch(() => ({ body: SERPAPI_EBAY_RESPONSE }));
+    const [first] = await searchEbayViaSerpApi({ query: 'hoodie', timeoutMs: 1000 });
+    assert.equal(first.currency, 'USD');
+    assert.equal(first.priceUsd, 165);
+  } finally {
+    config.country = previous;
+  }
+});
+
+test('searchEbayViaSerpApi searches ebay.com clothing', async () => {
+  const calls = mockFetch(() => ({ body: SERPAPI_EBAY_RESPONSE }));
+  const listings = await searchEbayViaSerpApi({ query: 'Supreme NYC Collage Zip Up Hoodie', timeoutMs: 1000 });
+  assert.equal(listings.length, 3);
+  const params = new URL(calls[0].url).searchParams;
+  assert.equal(params.get('engine'), 'ebay');
+  assert.equal(params.get('_nkw'), 'Supreme NYC Collage Zip Up Hoodie');
+  assert.equal(params.get('ebay_domain'), 'ebay.com');
+  assert.equal(params.get('category_id'), '11450');
 });

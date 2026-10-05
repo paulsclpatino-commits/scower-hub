@@ -40,6 +40,20 @@ export async function normalizeImage(buffer) {
   }
 }
 
+/**
+ * Re-encode a JPEG until it fits in maxBytes (SerpApi's image upload takes at
+ * most 500 KB). Lens doesn't need more than ~1000px to recognize clothing.
+ */
+export async function shrinkJpeg(jpeg, maxBytes) {
+  if (jpeg.length <= maxBytes) return jpeg;
+  const sharp = await loadSharp();
+  for (const [size, quality] of [[1024, 82], [900, 75], [768, 70], [640, 65], [512, 60]]) {
+    const smaller = await sharp(jpeg).resize(size, size, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality }).toBuffer();
+    if (smaller.length <= maxBytes) return smaller;
+  }
+  throw new Error('Photo is too detailed to shrink under the upload limit');
+}
+
 export function decodeDataUrl(dataUrl) {
   const match = /^data:image\/[\w.+-]+;base64,([A-Za-z0-9+/=\s]+)$/.exec(dataUrl || '');
   if (!match) throw new UserError('The upload must be an image.');

@@ -67,7 +67,8 @@ function logStartup(url) {
   }
   console.log(`  [${mark(f.identify)}] AI item identification   (ANTHROPIC_API_KEY)`);
   console.log(`  [${mark(f.googleLens)}] Google Lens + Shopping    (SERPAPI_KEY)`);
-  console.log(`  [${mark(f.ebay)}] eBay                      (EBAY_CLIENT_ID / EBAY_CLIENT_SECRET)`);
+  if (f.ebay) console.log(`  [on ] eBay photo + keyword      (EBAY_CLIENT_ID / EBAY_CLIENT_SECRET)`);
+  else console.log(`  [${mark(f.ebaySerpApi)}] eBay                      (via SERPAPI_KEY, or EBAY_CLIENT_ID / EBAY_CLIENT_SECRET)`);
   if (!f.identify && !f.googleLens && !f.ebay) {
     console.log('\n  No API keys found. Put them in the .env file in the Scower folder (see README),');
     console.log('  or run the demo (start-demo.cmd, or `npm run demo`) to try it with sample data.');

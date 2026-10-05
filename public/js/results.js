@@ -3,6 +3,8 @@
 
 export const SIZE_ORDER = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '4XL', '5XL', 'One Size'];
 export const UNKNOWN_SIZE = 'Not listed';
+// One listing offering several sizes (e.g. an eBay listing with a price range).
+export const MULTI_SIZE = 'Several sizes';
 
 export function sizeRank(size) {
   const index = SIZE_ORDER.indexOf(size);
@@ -57,7 +59,7 @@ export function applyFilters(listings, verdicts, filters, skip = null) {
     if (filters.match === 'exact' && verdict !== 'exact') return false;
     if (filters.match === 'close' && verdict === 'different') return false;
     if (!filters.showNoPrice && l.price == null) return false;
-    if (skip !== 'sizes' && sizes.size && !sizes.has(l.size ?? UNKNOWN_SIZE)) return false;
+    if (skip !== 'sizes' && sizes.size && !sizes.has(l.size ?? UNKNOWN_SIZE) && l.size !== MULTI_SIZE) return false;
     if (skip !== 'stores' && stores.size && !stores.has(l.store)) return false;
     if (skip !== 'conditions' && conditions.size && !conditions.has(conditionBucket(l.condition))) return false;
     if (skip !== 'price') {

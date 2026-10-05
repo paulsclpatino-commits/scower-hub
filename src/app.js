@@ -2,8 +2,29 @@ import path from 'node:path';
 import express from 'express';
 import { PROJECT_ROOT, enabledFeatures } from './config.js';
 import { UserError, describeError, logWarning } from './http.js';
-import { decodeDataUrl, fetchImageFromUrl, getHostedImage, normalizeImage, publicImageUrl } from './images.js';
+import { decodeDataUrl, fetchImageFromUrl, getHostedImage, normalizeImage, publicImageUrl, shrinkJpeg } from './images.js';
 import { cachedSearch, runDemoSearch } from './search.js';
+import { uploadImageToSerpApi } from './sources/serpapi.js';
+
+const SERPAPI_UPLOAD_LIMIT = 490 * 1024; // SerpApi accepts up to 500 KB
+
+/**
+ * How Google Lens gets the photo: a pasted link is used as-is; an upload goes
+ * straight to SerpApi, falling back to this site's own URL (when it's online)
+ * or a temporary image host if that fails.
+ */
+async function lensImageFor({ req, jpeg, sourceImageUrl, signal }) {
+  if (sourceImageUrl) return { imageUrl: sourceImageUrl };
+  try {
+    return { imageId: await uploadImageToSerpApi(await shrinkJpeg(jpeg, SERPAPI_UPLOAD_LIMIT), { signal }) };
+  } catch (err) {
+    // A rejected key fails Lens too, so report it instead of uploading the photo elsewhere.
+    if (signal.aborted || err?.status === 401 || err?.status === 403) throw err;
+    logWarning('[lens] SerpApi upload failed, trying a public link instead:', describeError(err));
+  }
+  const imageUrl = await publicImageUrl({ req, jpeg, signal });
+  return imageUrl ? { imageUrl } : null;
+}
 
 // Simple per-IP limit so a public deployment can't burn through API credits.
 function rateLimiter({ limit, windowMs }) {
@@ -102,12 +123,9 @@ export function createApp({ features = () => enabledFeatures(), searchOptions = 
       if (on.demo) {
         await runDemoSearch({ emit, signal, hint, ...searchOptions });
       } else {
-        let imageUrlPromise;
-        const getImageUrl = () => {
-          imageUrlPromise ??= sourceImageUrl ? Promise.resolve(sourceImageUrl) : publicImageUrl({ req, jpeg, signal });
-          return imageUrlPromise;
-        };
-        await cachedSearch({ jpeg, hint }, { emit, signal, features: on, getImageUrl, ...searchOptions });
+        let lensImage;
+        const getLensImage = () => (lensImage ??= lensImageFor({ req, jpeg, sourceImageUrl, signal }));
+        await cachedSearch({ jpeg, hint }, { emit, signal, features: on, getLensImage, ...searchOptions });
       }
     } catch (err) {
       if (!signal.aborted) {

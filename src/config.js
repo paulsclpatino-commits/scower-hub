@@ -44,6 +44,9 @@ export const config = {
   },
 
   serpApiKey: env.SERPAPI_KEY || '',
+  // Search eBay through SerpApi when there are no eBay developer keys
+  // (costs one extra SerpApi search per photo). "off" to skip.
+  serpApiEbay: !/^(?:off|false|0|no)$/i.test((env.SERPAPI_EBAY || '').trim()),
 
   ebay: {
     clientId: env.EBAY_CLIENT_ID || '',
@@ -66,6 +69,7 @@ export function enabledFeatures() {
     googleLens: Boolean(config.serpApiKey),
     googleShopping: Boolean(config.serpApiKey),
     ebay: Boolean(config.ebay.clientId && config.ebay.clientSecret),
+    ebaySerpApi: Boolean(config.serpApiKey && !(config.ebay.clientId && config.ebay.clientSecret) && config.serpApiEbay),
     demo: config.demo,
   };
 }

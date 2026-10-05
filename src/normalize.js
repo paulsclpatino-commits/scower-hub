@@ -137,10 +137,14 @@ export function extractSize(title) {
   if (!title) return null;
   const text = ` ${title} `;
 
+  // A title listing several sizes ("S M L XL", "S/M/L") is one listing for many sizes.
+  const listed = text.match(/(?<![\w&'.-])(?:XXS|XS|S|M|L|XL|XXL|XXXL|[2-5]XL)(?![\w&'.-])/g) || [];
+  if (new Set(listed).size >= 3) return null;
+
   // 1. Explicit "Size L", "Sz: XL", "Tagged M", "size 32x30", "size 10.5"
   const explicit = text.match(
     new RegExp(
-      `\\b(?:size|sz|sze|tag(?:ged)?(?:\\s+size)?)\\.?\\s*[:#-]?\\s*(${WORD_SIZE_PATTERN}|${LETTER_PATTERN}|one\\s?size|os|\\d{2}\\s*[xX/]\\s*\\d{2}|\\d{1,2}(?:\\.5)?)(?![\\w&'])`,
+      `\\b(?:size|sz|sze|tag(?:ged)?(?:\\s+size)?)\\b\\.?\\s*[:#-]?\\s*(${WORD_SIZE_PATTERN}|${LETTER_PATTERN}|one\\s?size|os|\\d{2}\\s*[xX/]\\s*\\d{2}|\\d{1,2}(?:\\.5)?)(?![\\w&'])`,
       'i',
     ),
   );

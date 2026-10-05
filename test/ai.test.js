@@ -1,6 +1,6 @@
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyListings, heuristicMatches, identifyItem, setAnthropicClient } from '../src/ai.js';
+import { classifyListings, heuristicMatches, identifyItem, looksLikeKnockoff, setAnthropicClient } from '../src/ai.js';
 
 afterEach(() => setAnthropicClient(null));
 
@@ -101,4 +101,33 @@ test('heuristicMatches scores titles by query overlap', () => {
     { id: 'c', title: 'Nike Tech Fleece' },
   ]);
   assert.deepEqual(verdicts, { a: 'exact', b: 'similar', c: 'different' });
+});
+
+test('heuristicMatches marks knock-offs and lots as different', () => {
+  const verdicts = heuristicMatches('Supreme NYC Collage Zip Up Hoodie', [
+    { id: 'a', title: 'Collage graffiti zip hoodie (inspired) Supreme NYC style' },
+    { id: 'b', title: 'Supreme NYC Collage Zip Up Hoodie 1:1 rep' },
+    { id: 'c', title: 'Lot of 3 Supreme NYC Collage Zip Up Hoodie' },
+    { id: 'd', title: 'Supreme NYC Collage Zip Up Hoodie Black Large' },
+  ]);
+  assert.deepEqual(verdicts, { a: 'different', b: 'different', c: 'different', d: 'exact' });
+  assert.equal(looksLikeKnockoff('Faux fake fur trim parka'), false);
+  assert.equal(looksLikeKnockoff('Represent Clo hoodie, has a lot of life left'), false);
+  assert.equal(looksLikeKnockoff('Supreme box logo FAKE'), true);
+});
+
+test('looksLikeKnockoff leaves real products, brands and negations alone', () => {
+  // Maison Margiela sells genuine "Replica" sneakers: the word is in the search itself.
+  assert.equal(looksLikeKnockoff('Maison Margiela Replica GAT Sneakers White', 'Maison Margiela Replica Sneakers'), false);
+  assert.equal(looksLikeKnockoff('HOMAGE Chicago Bulls Tee'), false);
+  assert.equal(looksLikeKnockoff('Unbranded Black Zip Hoodie Mens L'), false);
+  assert.equal(looksLikeKnockoff('Supreme Box Logo Hoodie 100% Authentic Not Fake'), false);
+  assert.equal(looksLikeKnockoff('Supreme hoodie, no reps'), false);
+  assert.equal(looksLikeKnockoff('Supreme 1:1 rep hoodie', 'Supreme hoodie'), true);
+  const verdicts = heuristicMatches('Maison Margiela Replica Sneakers', [
+    { id: 'a', title: 'Maison Margiela Replica GAT Sneakers White' },
+    { id: 'b', title: 'Maison Margiela Replica Low Top Sneakers' },
+  ]);
+  assert.notEqual(verdicts.a, 'different');
+  assert.notEqual(verdicts.b, 'different');
 });

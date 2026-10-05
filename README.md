@@ -4,7 +4,7 @@ Drop in a photo of a piece of clothing and Scower finds that exact item for sale
 
 - **Upload, drag in, or paste** a photo (Ctrl/⌘+V), or paste an image link
 - **AI identification** names the exact product, e.g. *Supreme NYC Collage Zip Up Hooded Sweatshirt, Black, FW24*
-- **Searches several sources at once**: Google Lens reverse-image search (covers Grailed, StockX, GOAT, Depop, Poshmark, Mercari, brand stores and more), Google Shopping, and eBay (photo match and keyword search)
+- **Searches several sources at once**: Google Lens reverse-image search (covers Grailed, StockX, GOAT, Depop, Poshmark, Mercari, brand stores and more), Google Shopping, and eBay (keyword search through SerpApi, or eBay's own photo and keyword search with eBay keys)
 - **Cheapest first**, with sizes read from each listing, shipping costs where the store gives them, and a "Lowest price" badge
 - **Filters** for size, price range, store, condition, and exact match vs. similar items
 - **Match check**: AI marks each listing as an exact match, a similar item, or a different item (replicas, other colorways, lots), and hides the different ones by default
@@ -58,21 +58,23 @@ Your browser opens http://localhost:3000. Click **Find the lowest price** to see
 
    | Key | What it adds | Where to get it |
    | --- | --- | --- |
-   | `SERPAPI_KEY` | Google Lens + Google Shopping: finds your photo on Grailed, StockX, Depop, Poshmark, eBay, stores and more. **Start with this one.** | [serpapi.com](https://serpapi.com) (has a free plan) |
+   | `SERPAPI_KEY` | Google Lens, Google Shopping and eBay: finds your photo on Grailed, StockX, Depop, Poshmark, eBay, stores and more. **Start with this one.** | [serpapi.com](https://serpapi.com) (free plan: 250 searches a month) |
    | `ANTHROPIC_API_KEY` | Names the exact item and checks which listings really match it | [console.anthropic.com](https://console.anthropic.com) (pay per use) |
-   | `EBAY_CLIENT_ID` + `EBAY_CLIENT_SECRET` | eBay photo search + keyword search | [developer.ebay.com](https://developer.ebay.com) (free): create a **Production** keyset |
+   | `EBAY_CLIENT_ID` + `EBAY_CLIENT_SECRET` | eBay's own search, including search by photo, without using SerpApi searches | [developer.ebay.com](https://developer.ebay.com) (free): create a **Production** keyset |
 
-   With only `SERPAPI_KEY` you get Google Lens and Google Shopping results for your photo. Adding `ANTHROPIC_API_KEY` names the exact item, which makes the keyword searches more accurate, and marks which listings are look-alikes.
+   With only `SERPAPI_KEY` you get Google Lens, Google Shopping and eBay results for your photo. Adding `ANTHROPIC_API_KEY` names the exact item, which makes the keyword searches more accurate, and marks which listings are look-alikes.
 3. Start Scower: double-click `start.cmd` on Windows, or run `npm run local` in a terminal.
 
-**Cost per search:** 3 SerpApi searches (2 Lens + 1 Shopping), 2 Claude requests, and a few eBay API calls, which are free within eBay's daily limits.
+**Cost per search:** 4 SerpApi searches (2 Google Lens, 1 Google Shopping, 1 eBay), so the free plan covers about 60 photo searches a month. With eBay keys, eBay is searched through eBay's own free API instead, and each photo search uses 3 SerpApi searches. Without eBay keys, set `SERPAPI_EBAY=off` to skip eBay and save that search. Searching the same photo again within 30 minutes reuses the earlier results for free. With `ANTHROPIC_API_KEY`, each search also makes 2 Claude requests.
 
 ### About Google Lens and your photo
 
-Google Lens can only search a photo it can download from a public link:
+Your photo is uploaded straight to SerpApi for Google Lens. SerpApi's upload link expires after 10 minutes. If that upload fails, Scower falls back to:
 
-- **Deployed online** (Render, Railway, Fly.io, etc.): the site serves the photo itself for 15 minutes. Nothing to configure.
-- **Running on your computer**: the photo is uploaded to [litterbox.catbox.moe](https://litterbox.catbox.moe), a temporary host that deletes files after 1 hour. Set `TEMP_IMAGE_HOST=off` to turn this off. Lens is then skipped for uploaded photos, but pasted image links still work.
+- **Deployed online** (Render, Railway, Fly.io, etc.): the site serves the photo itself for 15 minutes.
+- **Running on your computer**: a temporary upload to [litterbox.catbox.moe](https://litterbox.catbox.moe), which deletes files after 1 hour. Set `TEMP_IMAGE_HOST=off` to turn this fallback off.
+
+Pasted image links are passed to Google Lens as they are.
 
 ## Put it online
 
@@ -92,13 +94,16 @@ A public site spends your API credits on every visitor's search. A built-in limi
 photo ──► normalize (upright JPEG, ≤1280px)
             │
             ├──► Claude: what is this? ──► keyword query ──► eBay keyword search
-            │                                             └─► Google Shopping
-            ├──► Google Lens (via SerpApi): visual + product matches
-            └──► eBay search-by-image
+            │    (no AI key: the words most     │             └─► Google Shopping
+            │     Lens matches agree on) ───────┘
+            ├──► Google Lens (photo uploaded to SerpApi): visual + product matches
+            └──► eBay search-by-image (eBay keys only)
                                    │
             all listings ◄─────────┘  merged by URL (same eBay item from two sources = one card)
                  │
                  └──► Claude: exact / similar / different? ──► browser sorts & filters
+                      (no AI key: keyword overlap, and titles with knock-off
+                       words like "inspired" or "1:1 rep" count as different)
 ```
 
 The server streams progress to the browser as newline-delimited JSON, so listings appear while slower sources are still running. If one source fails, the others still return results, and the failed source shows a red chip with the reason.
